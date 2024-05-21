@@ -9,7 +9,7 @@ PlaneBrain - 2D representation of 3D neuroimaging data in the form of mosaics wi
 Users can specify slices to view and adjust image quality. 
 The script supports visualization of the raw brain image, optionally with overlaid segmentation outlines if provided. 
 If no step size is specified, the script dynamically adapts to show a maximum of 50 equally spaced slices. 
-Completely white rows and columns are removed from the final image.
+Completely white rows and columns are removed from the final image. The script also handles 4D images by creating a mosaic for each 3D volume within the 4D file and saving the output with a modified file name that includes the volume number.
 
 :Requires: Python 3, NumPy, Matplotlib, Nibabel, scikit-image, pydicom, Pillow.
 
@@ -29,19 +29,19 @@ Completely white rows and columns are removed from the final image.
 
 :TODO: 
 - Implement functionality for automatic slice selection based on ROI.
-- Make it handle 4d images
+- Ensure the script logs the command used and the error to failed.log if it fails.
 """
 
 #=============================================
 # Metadata
 #=============================================
-__author__ = 'MDS'
-__organization__ = 'MGH/HMS'
-__contact__ = 'mdschirmer @ github'
+__author__ = ''
+__organization__ = ''
+__contact__ = ''
 __copyright__ = 'CC-BY'
 __license__ = 'http://www.opensource.org/licenses/mit-license.php'
-__date__ = '2023-05'
-__version__ = '0.3'
+__date__ = '2024-05-21'
+__version__ = '0.4'
 
 #=============================================
 # Import statements
@@ -56,6 +56,7 @@ import skimage
 import matplotlib.gridspec as gridspec
 import pydicom
 from PIL import Image, ImageChops, ImageOps
+import re
 
 import pdb
 
@@ -148,108 +149,136 @@ def read_dicom_folder(dcmpath):
 #=============================================
 # Main method
 #=============================================
+import traceback
+
 def main(argv):
-    # Load image
-    if argv.dcm is False:
-        nii = nib.load(argv.i)
-        img = nii.get_fdata()
-    else:
-        assert os.path.isdir(argv.i), "DCM flag specified, input should be a folder"
-        img = np.rot90(read_dicom_folder(argv.i), -1)
-
-    img = cut_img(img, argv.smin, argv.smax)
-
-    # Load segmentations if specified
-    seg, brain = None, None
-    if argv.l is not None:
-        nii = nib.load(argv.l)
-        seg = nii.get_fdata()
-        seg = cut_img(seg, argv.smin, argv.smax)
-
-    if argv.b is not None:
-        nii = nib.load(argv.b)
-        brain = nii.get_fdata()
-        brain = cut_img(brain, argv.smin, argv.smax)
-
-    # Define plot parameters
-    dpi = float(argv.dpi)
-    if argv.s is not None:
-        step_size = int(argv.s)
-        img_slices = np.arange(0, img.shape[2], step_size).astype(int)
-    else:
-        step_size = max(1, img.shape[2] // 50)  # Ensure at most 50 slices
-        img_slices = np.arange(0, img.shape[2], step_size).astype(int)
-    num_slices = len(img_slices)
-
-    # Define maximum number of images per row
-    max_img_per_row = 10
-
-    # Calculate the number of images per row dynamically
-    img_per_row = min(max_img_per_row, num_slices)
-
-    # Calculate the number of rows needed
-    if seg is not None or brain is not None:
-        rows_needed = (num_slices + img_per_row - 1) // img_per_row * 2  # Double the number of rows if segmentation overlays are present
-    else:
-        rows_needed = (num_slices + img_per_row - 1) // img_per_row
-
-    # Adjust figure size to minimize white space and ensure good visibility
-    fig_width = img_per_row * 3  # Increase width to reduce thin columns
-    fig_height = fig_width * (rows_needed / img_per_row)  # Calculate height based on the ratio of total slices to images per row
-    fig = plt.figure(figsize=(fig_width, fig_height))
-
-    # Create axes for plotting and remove white space/axis where possible
-    ax = gridspec.GridSpec(rows_needed, img_per_row, wspace=0, hspace=0)
-
-    for ii in range(rows_needed * img_per_row):
-        a = plt.subplot(ax[ii])
-        a.axis('off')
-
-    for ii, img_slice in enumerate(img_slices):
-        row_idx = ii // img_per_row
-        col_idx = ii % img_per_row
-
-        if seg is not None or brain is not None:
-            # Plot brain slices in odd rows
-            a = plt.subplot(ax[row_idx * 2, col_idx])
-            a.imshow(get_slice(img, img_slice), cmap='gray')
-            a.axis('off')
-
-            # Plot segmentation overlays in even rows if available
-            overlay_row_idx = row_idx * 2 + 1
-            a = plt.subplot(ax[overlay_row_idx, col_idx])
-            a.imshow(get_slice(img, img_slice), cmap='gray')
-            a.axis('off')
-
-            if brain is not None:
-                contours = get_outline(brain, img_slice)
-                for contour in contours:
-                    a.plot(contour[:, 1], contour[:, 0], linewidth=.5, color='orange')
-
-            if seg is not None:
-                contours = get_outline(seg, img_slice)
-                for contour in contours:
-                    a.plot(contour[:, 1], contour[:, 0], linewidth=.5, color='r')
+    try:
+        # Load image
+        if argv.dcm is False:
+            nii = nib.load(argv.i)
+            img = nii.get_fdata()
         else:
-            # Plot brain slices when no segmentations are available
-            a = plt.subplot(ax[row_idx, col_idx])
-            a.imshow(get_slice(img, img_slice), cmap='gray')
-            a.axis('off')
+            assert os.path.isdir(argv.i), "DCM flag specified, input should be a folder"
+            img = np.rot90(read_dicom_folder(argv.i), -1)
 
-    # Convert figure to array, remove white rows and columns while maintaining size
-    fig.canvas.draw()
-    img_data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    img_data = img_data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    original_width, original_height = fig.canvas.get_width_height()
+        img = cut_img(img, argv.smin, argv.smax)
 
-    # Remove white rows and columns and maintain size
-    trimmed_data = remove_white_rows_cols_with_size(img_data, original_width, original_height)
+        # Check if the image is 4D
+        if img.ndim == 4:
+            volumes = img.shape[3]
+        else:
+            volumes = 1
 
-    # Convert trimmed array back to image and save
-    trimmed_img = Image.fromarray(trimmed_data)
-    trimmed_img.save(argv.o)
+        for vol in range(volumes):
+            if volumes > 1:
+                img_vol = img[:, :, :, vol]
+                output_file = re.sub(r'(\.\w+)$', f'_vol{vol:04d}\\1', argv.o)
+            else:
+                img_vol = img
+                output_file = argv.o
 
-    return 0
+            # Load segmentations if specified
+            seg, brain = None, None
+            if argv.l is not None:
+                nii = nib.load(argv.l)
+                seg = nii.get_fdata()
+                seg = cut_img(seg, argv.smin, argv.smax)
+                if volumes > 1:
+                    seg = seg[:, :, :, vol]
+
+            if argv.b is not None:
+                nii = nib.load(argv.b)
+                brain = nii.get_fdata()
+                brain = cut_img(brain, argv.smin, argv.smax)
+                if volumes > 1:
+                    brain = brain[:, :, :, vol]
+
+            # Define plot parameters
+            dpi = float(argv.dpi)
+            if argv.s is not None:
+                step_size = int(argv.s)
+                img_slices = np.arange(0, img_vol.shape[2], step_size).astype(int)
+            else:
+                step_size = max(1, img_vol.shape[2] // 50)  # Ensure at most 50 slices
+                img_slices = np.arange(0, img_vol.shape[2], step_size).astype(int)
+            num_slices = len(img_slices)
+
+            # Define maximum number of images per row
+            max_img_per_row = 10
+
+            # Calculate the number of images per row dynamically
+            img_per_row = min(max_img_per_row, num_slices)
+
+            # Calculate the number of rows needed
+            if seg is not None or brain is not None:
+                rows_needed = (num_slices + img_per_row - 1) // img_per_row * 2  # Double the number of rows if segmentation overlays are present
+            else:
+                rows_needed = (num_slices + img_per_row - 1) // img_per_row
+
+            # Adjust figure size to minimize white space and ensure good visibility
+            fig_width = img_per_row * 3  # Increase width to reduce thin columns
+            fig_height = fig_width * (rows_needed / img_per_row)  # Calculate height based on the ratio of total slices to images per row
+            fig = plt.figure(figsize=(fig_width, fig_height))
+
+            # Create axes for plotting and remove white space/axis where possible
+            ax = gridspec.GridSpec(rows_needed, img_per_row, wspace=0, hspace=0)
+
+            for ii in range(rows_needed * img_per_row):
+                a = plt.subplot(ax[ii])
+                a.axis('off')
+
+            for ii, img_slice in enumerate(img_slices):
+                row_idx = ii // img_per_row
+                col_idx = ii % img_per_row
+
+                if seg is not None or brain is not None:
+                    # Plot brain slices in odd rows
+                    a = plt.subplot(ax[row_idx * 2, col_idx])
+                    a.imshow(get_slice(img_vol, img_slice), cmap='gray')
+                    a.axis('off')
+
+                    # Plot segmentation overlays in even rows if available
+                    overlay_row_idx = row_idx * 2 + 1
+                    a = plt.subplot(ax[overlay_row_idx, col_idx])
+                    a.imshow(get_slice(img_vol, img_slice), cmap='gray')
+                    a.axis('off')
+
+                    if brain is not None:
+                        contours = get_outline(brain, img_slice)
+                        for contour in contours:
+                            a.plot(contour[:, 1], contour[:, 0], linewidth=.5, color='orange')
+
+                    if seg is not None:
+                        contours = get_outline(seg, img_slice)
+                        for contour in contours:
+                            a.plot(contour[:, 1], contour[:, 0], linewidth=.5, color='r')
+                else:
+                    # Plot brain slices when no segmentations are available
+                    a = plt.subplot(ax[row_idx, col_idx])
+                    a.imshow(get_slice(img_vol, img_slice), cmap='gray')
+                    a.axis('off')
+
+            # Convert figure to array, remove white rows and columns while maintaining size
+            fig.canvas.draw()
+            img_data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            img_data = img_data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            original_width, original_height = fig.canvas.get_width_height()
+
+            # Remove white rows and columns and maintain size
+            trimmed_data = remove_white_rows_cols_with_size(img_data, original_width, original_height)
+
+            # Convert trimmed array back to image and save
+            trimmed_img = Image.fromarray(trimmed_data)
+            trimmed_img.save(output_file)
+    except Exception as e:
+        # Write the command that was used to call the script to failed.log
+        output_dir = os.path.dirname(argv.o)
+        with open(os.path.join(output_dir, 'failed.log'), 'a') as log_file:
+            log_file.write(f"Command: {' '.join(sys.argv)}\n")
+            log_file.write(f"===============================\n")
+            log_file.write(f"Error: {str(e)}\n")
+            log_file.write(traceback.format_exc())
+            log_file.write(f"#############################\n")
 
 if __name__ == "__main__":
     # Catch input
