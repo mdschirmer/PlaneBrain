@@ -282,7 +282,7 @@ def main(argv):
                     brain_mask = np.zeros((base_slice.shape))
                     for c in contours:
                         for p in c:
-                            brain_mask[int(p[0]-l_w):int(p[0]+l_w), int(p[1]-l_w):int(p[1]+l_w)]  = 255
+                            brain_mask[int(p[0]-l_w):int(p[0]+l_w), int(p[1]-l_w):int(p[1]+l_w)]  = 2**64
                     figure_array[2][bounds[1]:bounds[2], bounds[3]:bounds[4]] = brain_mask 
 
             # Generate masked arrays to display figure properly
@@ -290,14 +290,17 @@ def main(argv):
             masked_brain = np.ma.masked_where(figure_array[2] == 0, figure_array[2])
 
             # Display base layer with brain scans
-            plt.imshow(figure_array[0], cmap= 'gray') 
+            plt.imshow(figure_array[0], cmap= 'gray', vmin = 0, vmax = (.5* figure_array[0].max())) 
             
             # Display lesion or brain overlays if available:
             if seg is not None:
-                plt.imshow(masked_lesion, cmap= 'autumn', interpolation='none') # In autumn cmap, low values are red and high are yellow. 
+                plt.imshow(masked_lesion, cmap= 'autumn', interpolation='none', vmin = 0, vmax = 255) # In autumn cmap, low values are red and high are yellow. 
 
             if brain is not None:
-                plt.imshow(masked_brain, cmap= 'cool', interpolation='none')
+                plt.imshow(masked_brain, cmap= 'cool', interpolation='none', vmin = 0, vmax = 255)
+
+            
+
 
             #Output figure
             plt.axis('off')
