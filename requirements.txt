@@ -1,0 +1,7 @@
+nibabel==5.2.1
+numpy==2.0.1
+matplotlib==3.9.1
+scikit-image==0.24.0
+pydicom==2.4.4
+pillow==10.4.0
+
