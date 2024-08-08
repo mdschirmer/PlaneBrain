@@ -31,6 +31,8 @@ Completely white rows and columns are removed from the final image. The script a
 :TODO: 
 - Implement functionality for automatic slice selection based on ROI.
 - Ensure the script logs the command used and the error to failed.log if it fails.
+- Make color scaling for base layer dynamic. Running into issue where color scaling for atlases is not behaving as expected. 
+- Add Left/Right labels as convenience feature
 """
 
 #=============================================
@@ -41,7 +43,7 @@ __organization__ = ''
 __contact__ = ''
 __copyright__ = 'CC-BY'
 __license__ = 'http://www.opensource.org/licenses/mit-license.php'
-__date__ = '2024-05-21'
+__date__ = '2024-08-08'
 __version__ = '0.5'
 
 #=============================================
@@ -57,8 +59,9 @@ import skimage
 import matplotlib.gridspec as gridspec
 import pydicom
 from PIL import Image, ImageChops, ImageOps
+from matplotlib.colors import LogNorm, SymLogNorm
 import re
-
+import time
 import pdb
 
 #=============================================
@@ -282,7 +285,7 @@ def main(argv):
                     brain_mask = np.zeros((base_slice.shape))
                     for c in contours:
                         for p in c:
-                            brain_mask[int(p[0]-l_w):int(p[0]+l_w), int(p[1]-l_w):int(p[1]+l_w)]  = 2**64
+                            brain_mask[int(p[0]-l_w):int(p[0]+l_w), int(p[1]-l_w):int(p[1]+l_w)]  = 255
                     figure_array[2][bounds[1]:bounds[2], bounds[3]:bounds[4]] = brain_mask 
 
             # Generate masked arrays to display figure properly
@@ -290,8 +293,8 @@ def main(argv):
             masked_brain = np.ma.masked_where(figure_array[2] == 0, figure_array[2])
 
             # Display base layer with brain scans
-            plt.imshow(figure_array[0], cmap= 'gray', vmin = 0, vmax = (.5* figure_array[0].max())) 
-            
+            plt.imshow(figure_array[0], cmap= 'gray', vmin = 0, vmax = (.5* figure_array[0].max())) #check to see this color scaling holds in general 
+
             # Display lesion or brain overlays if available:
             if seg is not None:
                 plt.imshow(masked_lesion, cmap= 'autumn', interpolation='none', vmin = 0, vmax = 255) # In autumn cmap, low values are red and high are yellow. 
@@ -304,7 +307,7 @@ def main(argv):
 
             #Output figure
             plt.axis('off')
-            plt.savefig(output_file, dpi = 1000, pad_inches = 0, bbox_inches = 'tight') 
+            plt.savefig(output_file, dpi = 600, pad_inches = 0, bbox_inches = 'tight') 
             
 
                 
@@ -401,5 +404,7 @@ if __name__ == "__main__":
         (options, args) = parser.parse_args()
     except:
         sys.exit()
-
+    t1 = time.perf_counter()
     main(options)
+    t2 = time.perf_counter()
+    print(f"Mosaic Completed in: {t2 - t1}s")
