@@ -175,6 +175,29 @@ def generate_bounds(stacked, row_idx, col_idx, slice_row_size, slice_col_size):
         slice_c_ub = int((col_idx+1)*slice_col_size)
         return [slice_0_r_lb, slice_0_r_ub, slice_1_r_ub, slice_c_lb, slice_c_ub]
 
+def generate_labels():
+    #Render Left Label:
+    L = np.zeros((50, 50))
+    L[5:45, 10:15] = 255
+    L[40:45, 15:35] = 255
+
+    #Render Right Label:
+    R = np.zeros((50, 50))
+    R[5:45, 10:15] = 255
+    R[5:10, 15:27] = 255
+    R[20:25, 15:27] = 255
+    i = 0
+    while i <= 7:
+        R[int(5+i):int(10+i), int(27+i):int(31+i)] = 255
+        R[int(20-i):int(25-i), int(27+i):int(31+i)] = 255
+        i += 1 
+    R[25:27, 15:25] = 255
+    i = 0
+    while i <= 20:
+        R[int(21+i):int(25+i), int(15+i):int(20 + i)] = 255
+        i += 1
+
+    return L[::2, ::2], R[::2, ::2]
 #=============================================
 # Main method
 #=============================================
@@ -186,6 +209,7 @@ def main(argv):
         if argv.dcm is False:
             nii = nib.load(argv.i)
             img = nii.get_fdata()
+            affine = nii.affine 
         else:
             assert os.path.isdir(argv.i), "DCM flag specified, input should be a folder"
             img = np.rot90(read_dicom_folder(argv.i), -1)
@@ -252,6 +276,18 @@ def main(argv):
             frame = draw_frame(slice_row_size, slice_col_size, 255) #renders frame once
             l_w = 1 # Lineweight modifier for outlines. Final lineweight in pix is 1+2*l_w 
 
+            #Render left/right labels in corner based on nifti affine matrix if available. 
+            pad = 10
+            try:
+                if affine[0][0] >= 0:
+                    figure_array[0][pad:pad+left_label.shape[0], pad:pad+left_label.shape[1]] = left_label
+                    figure_array[0][pad:pad+right_label.shape[0], -right_label.shape[1]-pad:-pad] = right_label
+                else:
+                    figure_array[0][pad:pad+left_label.shape[0], -left_label.shape[1]-pad:-pad] = left_label
+                    figure_array[0][pad:pad+right_label[0], pad:pad+right_label.shape[1]] = right_label
+            except:
+                print("No Affine Matrix Found. Cannot Determine Orientation Labels")
+            
             for ii, img_slice in enumerate(img_slices):
                 # Generate upper and lower bounds for each slice's position in the array:
                 row_idx = ii // img_per_row
@@ -259,10 +295,10 @@ def main(argv):
                 bounds = generate_bounds(stacked= stacked, row_idx=row_idx, col_idx=col_idx, slice_row_size= slice_row_size, slice_col_size= slice_col_size)
                 
                 # Insert base slices into first layer 
-                base_slice = get_slice(img_vol, img_slice) 
-                figure_array[0][bounds[0]:bounds[1], bounds[3]:bounds[4]] = base_slice 
-                
-                 
+                base_slice = get_slice(img_vol, img_slice)
+                left_label, right_label = generate_labels()
+                figure_array[0][bounds[0]:bounds[1], bounds[3]:bounds[4]] = base_slice
+
                 # Insert second row of slices if applicable
                 if seg is not None or brain is not None: 
                     figure_array[0][bounds[1]:bounds[2], bounds[3]:bounds[4]] = base_slice
@@ -285,7 +321,7 @@ def main(argv):
                     brain_mask = np.zeros((base_slice.shape))
                     for c in contours:
                         for p in c:
-                            brain_mask[int(p[0]-l_w):int(p[0]+l_w), int(p[1]-l_w):int(p[1]+l_w)]  = 255
+                            brain_mask[int(p[0]-l_w):int(p[0]+l_w), int(p[1]-l_w):int(p[1]+l_w)]  = 1
                     figure_array[2][bounds[1]:bounds[2], bounds[3]:bounds[4]] = brain_mask 
 
             # Generate masked arrays to display figure properly
@@ -293,7 +329,7 @@ def main(argv):
             masked_brain = np.ma.masked_where(figure_array[2] == 0, figure_array[2])
 
             # Display base layer with brain scans
-            plt.imshow(figure_array[0], cmap= 'gray', vmin = 0, vmax = (.5* figure_array[0].max())) #check to see this color scaling holds in general 
+            plt.imshow(figure_array[0], cmap= 'gray', vmin = np.percentile(figure_array[0], 5), vmax = np.percentile(figure_array[0], 99.5)) #check to see this color scaling holds in general 
 
             # Display lesion or brain overlays if available:
             if seg is not None:
@@ -307,7 +343,7 @@ def main(argv):
 
             #Output figure
             plt.axis('off')
-            plt.savefig(output_file, dpi = 600, pad_inches = 0, bbox_inches = 'tight') 
+            plt.savefig(output_file, dpi = 650, pad_inches = 0, bbox_inches = 'tight') 
             
 
                 
