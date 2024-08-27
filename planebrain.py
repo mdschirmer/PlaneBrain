@@ -247,17 +247,17 @@ def main(argv):
                     brain = brain[:, :, :, vol]
 
             # Define plot parameters
-            dpi = float(argv.dpi)
+            dpi = int(argv.dpi)
             if argv.s is not None:
                 step_size = int(argv.s)
                 img_slices = np.arange(0, img_vol.shape[2], step_size).astype(int)
             else:
-                step_size = max(1, img_vol.shape[2] // 50)  # Ensure at most 50 slices
+                step_size = 1  # Ensure at most 50 slices
                 img_slices = np.arange(0, img_vol.shape[2], step_size).astype(int)
             num_slices = len(img_slices)
 
             # Define maximum number of images per row
-            max_img_per_row = 10
+            max_img_per_row = int(argv.max_img_per_row)
 
             # Calculate the number of images per row dynamically
             img_per_row = min(max_img_per_row, num_slices)
@@ -276,8 +276,6 @@ def main(argv):
             frame = draw_frame(slice_row_size, slice_col_size, 255) #renders frame once
             l_w = 1 # Lineweight modifier for outlines. Final lineweight in pix is 1+2*l_w 
 
-
-            
             for ii, img_slice in enumerate(img_slices):
                 # Generate upper and lower bounds for each slice's position in the array:
                 row_idx = ii // img_per_row
@@ -341,80 +339,10 @@ def main(argv):
             if brain is not None:
                 plt.imshow(masked_brain, cmap= 'cool', interpolation='none', vmin = 0, vmax = 255)
 
-            
-
-
             #Output figure
             plt.axis('off')
-            plt.savefig(output_file, dpi = 650, pad_inches = 0, bbox_inches = 'tight') 
+            plt.savefig(output_file, dpi = dpi, pad_inches = 0, bbox_inches = 'tight') 
             
-
-                
-            """    
-            # Adjust figure size to minimize white space and ensure gsizeood visibility
-            fig_width = img_per_row * 3  # Increase width to reduce thin columns
-            fig_height = fig_width * (rows_needed / img_per_row)  # Calculate height based on the ratio of total slices to images per row
-            fig = plt.figure(figsize=(fig_width, fig_height))
-
-            # Create axes for plotting and remove white space/axis where possible
-            ax = gridspec.GridSpec(rows_needed, img_per_row, wspace=0, hspace=0)
-
-            
-            for ii in range(rows_needed * img_per_row):
-                a = plt.subplot(ax[ii])
-                a.axis('off')
-
-            for ii, img_slice in enumerate(img_slices):
-                row_idx = ii // img_per_row
-                col_idx = ii % img_per_row
-
-                if seg is not None or brain is not None:
-                    # Plot brain slices in odd rows
-                    a = plt.subplot(ax[row_idx * 2, col_idx])
-                    a.imshow(get_slice(img_vol, img_slice), cmap='gray')
-                    a.axis('off')
-
-                    # Plot segmentation overlays in even rows if available
-                    overlay_row_idx = row_idx * 2 + 1
-                    a = plt.subplot(ax[overlay_row_idx, col_idx])
-                    segmentation_slice = get_slice(img_vol, img_slice)
-                    slice_rows, slice_cols = segmentation_slice.shape
-                    a.imshow(segmentation_slice, cmap= 'gray')
-                    #a.imshow(get_slice(img_vol, img_slice), cmap='gray')
-                    a.axis('off')
-
-                    contrast_multpilier = 50 #Multiplies contours to increase brightnes. 50 is arbitrary. 
-                    if brain is not None:
-                        contours = get_outline(brain, img_slice) * contrast_multpilier
-                        for contour in contours:
-                            a.plot(contour[:, 1], contour[:, 0], linewidth=.65, color='aqua') 
-         
-                    if seg is not None:
-                        contours = get_outline(seg, img_slice) * contrast_multpilier
-                        for contour in contours:
-                            a.plot(contour[:, 1], contour[:, 0], linewidth=.65, color='red')
-                            if argv.g is True:
-                                frame = draw_frame(slice_rows, slice_cols, np.max(segmentation_slice))
-                                a.imshow(frame, cmap= "autumn")
-                else:
-                    # Plot brain slices when no segmentations are available
-                    a = plt.subplot(ax[row_idx, col_idx])
-                    a.imshow(get_slice(img_vol, img_slice), cmap='gray')
-                    a.axis('off')
-
-            # Convert figure to array, remove white rows and columns while maintaining size
-            fig.canvas.draw()
-            img_data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            img_data = img_data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-            original_width, original_height = fig.canvas.get_width_height()
-
-            # Remove white rows and columns and maintain size
-            trimmed_data = remove_white_rows_cols_with_size(img_data, original_width, original_height)
-
-            # Convert trimmed array back to image and save
-            trimmed_img = Image.fromarray(trimmed_data)
-            trimmed_img.save(output_file)
-            """
     except Exception as e:
         # Write the command that was used to call the script to failed.log
         output_dir = os.path.dirname(argv.o)
@@ -424,7 +352,6 @@ def main(argv):
             log_file.write(f"Error: {str(e)}\n")
             log_file.write(traceback.format_exc())
             log_file.write(f"#############################\n")
-
 
 if __name__ == "__main__":
     # Catch input
@@ -438,8 +365,9 @@ if __name__ == "__main__":
         parser.add_option('--g', action='store_true', dest='g', help='Display frame around image slices containing lesion segmentations.', metavar = 'BOOL', default=False)
         parser.add_option('--smin', dest='smin', help='Minimum slice number', metavar='INTEGER', default=None)
         parser.add_option('--smax', dest='smax', help='Maximum slice number', metavar='INTEGER', default=None)
-        parser.add_option('--dpi', dest='dpi', help='Set output image dpi', metavar='INTEGER', default=80)
+        parser.add_option('--dpi', dest='dpi', help='Set output image dpi', metavar='INTEGER', default=650)
         parser.add_option('--dcm', action="store_true", dest='dcm', help='Set input file format to be dcm: -i option needs to be a folder', metavar='BOOL', default=False)
+        parser.add_option('--rmax', dest='max_img_per_row', help='Maximum number of images per row', metavar='INTEGER',default=10)
         (options, args) = parser.parse_args()
     except:
         sys.exit()
