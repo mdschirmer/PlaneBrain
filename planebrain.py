@@ -276,17 +276,7 @@ def main(argv):
             frame = draw_frame(slice_row_size, slice_col_size, 255) #renders frame once
             l_w = 1 # Lineweight modifier for outlines. Final lineweight in pix is 1+2*l_w 
 
-            #Render left/right labels in corner based on nifti affine matrix if available. 
-            pad = 10
-            try:
-                if affine[0][0] >= 0:
-                    figure_array[0][pad:pad+left_label.shape[0], pad:pad+left_label.shape[1]] = left_label
-                    figure_array[0][pad:pad+right_label.shape[0], -right_label.shape[1]-pad:-pad] = right_label
-                else:
-                    figure_array[0][pad:pad+left_label.shape[0], -left_label.shape[1]-pad:-pad] = left_label
-                    figure_array[0][pad:pad+right_label[0], pad:pad+right_label.shape[1]] = right_label
-            except:
-                print("No Affine Matrix Found. Cannot Determine Orientation Labels")
+
             
             for ii, img_slice in enumerate(img_slices):
                 # Generate upper and lower bounds for each slice's position in the array:
@@ -296,7 +286,6 @@ def main(argv):
                 
                 # Insert base slices into first layer 
                 base_slice = get_slice(img_vol, img_slice)
-                left_label, right_label = generate_labels()
                 figure_array[0][bounds[0]:bounds[1], bounds[3]:bounds[4]] = base_slice
 
                 # Insert second row of slices if applicable
@@ -323,6 +312,20 @@ def main(argv):
                         for p in c:
                             brain_mask[int(p[0]-l_w):int(p[0]+l_w), int(p[1]-l_w):int(p[1]+l_w)]  = 1
                     figure_array[2][bounds[1]:bounds[2], bounds[3]:bounds[4]] = brain_mask 
+
+            #Render left/right labels in corner based on nifti affine matrix if available. 
+            pad = 10
+            try:
+                left_label, right_label = generate_labels()
+                if bool(affine[0][0] >= 0):
+                    print("Rendering Labels")
+                    figure_array[0][pad:pad+left_label.shape[0], pad:pad+left_label.shape[1]] = left_label * 3
+                    figure_array[0][pad:pad+right_label.shape[0], -right_label.shape[1]-pad:-pad] = right_label * 3
+                else:
+                    figure_array[0][pad:pad+left_label.shape[0], -left_label.shape[1]-pad:-pad] = left_label * 3
+                    figure_array[0][pad:pad+right_label[0], pad:pad+right_label.shape[1]] = right_label * 3
+            except:
+                print("No Affine Matrix Found. Cannot Determine Orientation Labels")
 
             # Generate masked arrays to display figure properly
             masked_lesion = np.ma.masked_where(figure_array[1] == 0, figure_array[1]) 
