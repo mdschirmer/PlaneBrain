@@ -315,17 +315,17 @@ def main(argv):
 
             #Render left/right labels in corner based on nifti affine matrix if available. 
             pad = 10
+            left_label, right_label = generate_labels()
             try:
-                left_label, right_label = generate_labels()
                 if bool(affine[0][0] >= 0):
                     print("Rendering Labels")
                     figure_array[0][pad:pad+left_label.shape[0], pad:pad+left_label.shape[1]] = left_label * 3
                     figure_array[0][pad:pad+right_label.shape[0], -right_label.shape[1]-pad:-pad] = right_label * 3
                 else:
                     figure_array[0][pad:pad+left_label.shape[0], -left_label.shape[1]-pad:-pad] = left_label * 3
-                    figure_array[0][pad:pad+right_label[0], pad:pad+right_label.shape[1]] = right_label * 3
+                    figure_array[0][pad:pad+right_label.shape[0], pad:pad+right_label.shape[1]] = right_label * 3
             except:
-                print("No Affine Matrix Found. Cannot Determine Orientation Labels")
+                print("Error occured generating orientation labels. Affine matrix may be unavailable.")
 
             # Generate masked arrays to display figure properly
             masked_lesion = np.ma.masked_where(figure_array[1] == 0, figure_array[1]) 
@@ -346,7 +346,7 @@ def main(argv):
 
             #Output figure
             plt.axis('off')
-            plt.savefig(output_file, dpi = 650, pad_inches = 0, bbox_inches = 'tight') 
+            plt.savefig(output_file, dpi = 600, pad_inches = 0, bbox_inches = 'tight') 
             
 
                 
